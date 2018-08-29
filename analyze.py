@@ -5,6 +5,11 @@ import scipy.linalg
 from numpy import linalg as LA
 import struct
 import os
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 def analyze_bin(sz_path, base_tsv_path, num):
     file_baseline = base_tsv_path + '/state-' + str(num) + '.bin'
@@ -16,19 +21,32 @@ def analyze_bin(sz_path, base_tsv_path, num):
     err = []
 
     with open(file_baseline,'rb') as base_bin:
-        while base_bin.tell() < os.fstat(base_bin.fileno()).st_size:
+        f_slice = int(os.fstat(base_bin.fileno()).st_size / size)
+        f_start = rank * f_slice
+        f_end = (rank + 1) * f_slice - 1
+        if f_end > os.fstat(base_bin.fileno()).st_size:
+            f_end = os.fstat(base_bin.fileno()).st_size
+        base_bin.seek(f_start, 0)
+        while base_bin.tell() < f_end:
             real, = struct.unpack('d',base_bin.read(8))
             imag, = struct.unpack('d',base_bin.read(8))
             base_real.append(float(real))
             base_img.append(float(imag))
 
+    comm.Barrier()
     with open(file_sz_tsv,'rb') as sz_bin:
-        while sz_bin.tell() < os.fstat(sz_bin.fileno()).st_size:
+        f_slice = int(os.fstat(sz_bin.fileno()).st_size / size)
+        f_start = rank * f_slice
+        f_end = (rank + 1) * f_slice - 1
+        if f_end > os.fstat(sz_bin.fileno()).st_size:
+            f_end = os.fstat(sz_bin.fileno()).st_size
+        sz_bin.seek(f_start, 0)
+        while sz_bin.tell() < f_end:
             real, = struct.unpack('d',sz_bin.read(8))
             imag, = struct.unpack('d',sz_bin.read(8))
             sz_real.append(float(real))
             sz_img.append(float(imag))
-
+    
     base_vec = np.ones((len(base_real), 1), dtype=np.complex)
     sz_vec = np.ones((len(sz_real), 1), dtype=np.complex)
 
@@ -38,8 +56,11 @@ def analyze_bin(sz_path, base_tsv_path, num):
 
     base_vec_cj = np.conjugate(base_vec)
     fidelity = abs(np.inner(base_vec_cj.T, sz_vec.T))
-    fidelity2 = np.power(fidelity, 2)
-    return fidelity[0, 0], fidelity2[0, 0]
+    recv_fid = comm.gather(fidelity[0,0], root = 0)
+    if rank == 0:
+        return sum(recv_fid)
+    else:
+        return 0
 
 def analyze_out(sz_path):
     comp_time = []
@@ -85,17 +106,24 @@ def analyze_out(sz_path):
 def main(argv):
     sz_path = argv[1]
     base_tsv_path = argv[2]
-
-    analyze_out(sz_path)
     
-    file_err_analysis = sz_path + "/error_analysis.tsv"
-    file = open(file_err_analysis,"w")
-    file.write("Fidelity\n")
-    for i in range(1, 1013):
-    	fid, length = analyze_bin(sz_path, base_tsv_path, i)
-    	results = str(fid) + "\t" + str(length) + "\n"
-    	file.write(results)
-    file.close()
+    if rank == 0:
+        analyze_out(sz_path)
+
+    comm.Barrier()
+
+    if rank == 0:
+        file_err_analysis = sz_path + "/error_analysis.tsv"
+        file = open(file_err_analysis,"w")
+        file.write("Fidelity\n")
+
+    for i in range(9999999, 9999999+1):
+        fid = analyze_bin(sz_path, base_tsv_path, i)
+        if rank == 0:
+            results = str(fid) + "\n"
+            file.write(results)
+    if rank == 0:
+        file.close()
 
 def numpy_test():
     file = open('test.bin','rb')
