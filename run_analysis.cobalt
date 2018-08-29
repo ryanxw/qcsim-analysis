@@ -1,0 +1,45 @@
+#!/bin/bash
+#COBALT -t 01:00:00
+#COBALT -n 4
+#COBALT -A QCSim
+#COBALT -q debug-cache-quad
+#COBALT -O results_analysis_1e-2_qft_26
+
+# Various env settings are provided by Cobalt
+# echo $COBALT_JOBID  $COBALT_PARTNAME  $COBALT_JOBSIZE
+#aprun -n 4 -N 4 -d 1 -j 1 -cc depth /home/xinchuan/analysis.sh
+export PATH="/home/xinchuan/anaconda3/bin:$PATH"
+test_item=PW_REL_1E-2_128n
+test_name="qft_26_run"
+test_path="/projects/QCSim/""$test_name"
+base=$test_path"/baseline/"
+sz_test=$test_path"/""$test_item"
+
+EXE=/projects/QCSim/qft_26_run/analyze.py
+
+rpn=64
+allranks=$((COBALT_JOBSIZE*rpn))
+threads=64
+
+echo $allranks
+
+module swap cray-mpich cray-mpich-abi
+
+aprun -n $allranks \
+      -N $rpn \
+      -d 1 \
+      -cc depth \
+      -j 2 \
+      --env OMP_NUM_THREADS=$threads \
+      --env KMP_AFFINITY=scatter \
+      --env I_MPI_MIC=enable \
+      python $test_path/analyze.py $sz_test $base
+
+status=$?
+
+# could do another aprun here...
+
+exit $status
+
+
+
