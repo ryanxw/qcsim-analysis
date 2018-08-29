@@ -108,6 +108,8 @@ def main(argv):
     base_tsv_path = argv[2]
     
     if rank == 0:
+        print('---- start analyze ----')
+        print('size = ' + str(size))
         analyze_out(sz_path)
 
     comm.Barrier()
