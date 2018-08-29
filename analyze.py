@@ -32,7 +32,8 @@ def analyze_bin(sz_path, base_tsv_path, num):
             imag, = struct.unpack('d',base_bin.read(8))
             base_real.append(float(real))
             base_img.append(float(imag))
-
+    if rank == 0:
+        print("read baseline file finished\n")
     comm.Barrier()
     with open(file_sz_tsv,'rb') as sz_bin:
         f_slice = int(os.fstat(sz_bin.fileno()).st_size / size)
@@ -47,6 +48,8 @@ def analyze_bin(sz_path, base_tsv_path, num):
             sz_real.append(float(real))
             sz_img.append(float(imag))
     
+    if rank == 0:
+        print("read sz file finished\n")
     base_vec = np.ones((len(base_real), 1), dtype=np.complex)
     sz_vec = np.ones((len(sz_real), 1), dtype=np.complex)
 
